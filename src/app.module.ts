@@ -5,8 +5,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { LedgerModule } from './modules/ledger/ledger.module';
 import { UsersModule } from './modules/users/users.module';
+import { UserBalancesModule } from './modules/user-balances/user-balances.module';
 
 /** API 서버 진입 모듈 (CLI 는 commands/cli.module.ts) */
 @Module({
@@ -20,7 +20,7 @@ import { UsersModule } from './modules/users/users.module';
     UsersModule,
     AuthModule,
     // GET /api/points, /api/points/history
-    LedgerModule,
+    UserBalancesModule,
   ],
 })
 export class AppModule {}

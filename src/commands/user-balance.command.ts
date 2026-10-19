@@ -3,24 +3,24 @@ import { formatUnits } from 'ethers';
 import { Command, CommandRunner } from 'nest-commander';
 
 import { formatPoints } from '../modules/currencies/points';
-import { LedgerService } from '../modules/ledger/ledger.service';
+import { UserBalancesService } from '../modules/user-balances/user-balances.service';
 import { UsersService } from '../modules/users/users.service';
 
 /**
  * 사용법: npm run cli -- user-balance <유저 id 또는 이메일>
  *
- * 유저의 토큰별 포인트(user_balances)와 최근 원장(ledger_entries) 20건을 보여준다.
+ * 유저의 포인트(user_balances)와 최근 이력(user_balance_histories) 20건을 보여준다.
  */
 @Command({
   name: 'user-balance',
   arguments: '<user>',
-  description: '유저의 포인트와 최근 원장을 보여준다. 예) user-balance alice@example.com',
+  description: '유저의 포인트와 최근 이력을 보여준다. 예) user-balance alice@example.com',
 })
 export class UserBalanceCommand extends CommandRunner {
   private readonly logger = new Logger(UserBalanceCommand.name);
 
   constructor(
-    private readonly ledger: LedgerService,
+    private readonly userBalances: UserBalancesService,
     private readonly users: UsersService,
   ) {
     super();
@@ -32,31 +32,25 @@ export class UserBalanceCommand extends CommandRunner {
       throw new Error(`유저를 찾을 수 없습니다: ${idOrEmail}`);
     }
 
-    const [balances, entries] = await Promise.all([
-      this.ledger.findBalances(user.id),
-      this.ledger.findEntries(user.id),
+    const [points, histories] = await Promise.all([
+      this.userBalances.findPoints(user.id),
+      this.userBalances.findHistories(user.id),
     ]);
 
-    const lines = ['', `${user.email} (${user.id})`, '', '포인트'];
-    if (balances.length === 0) {
-      lines.push('  없음');
-    }
-    for (const b of balances) {
-      lines.push(`  ${b.currency.symbol.padEnd(8)} ${formatPoints(b.points)}`);
-    }
+    const lines = ['', `${user.email} (${user.id})`, '', `포인트  ${formatPoints(points)}`];
 
-    lines.push('', '최근 원장');
-    if (entries.length === 0) {
+    lines.push('', '최근 이력');
+    if (histories.length === 0) {
       lines.push('  없음');
     }
-    for (const e of entries) {
-      const token = e.transaction
-        ? `  (${formatUnits(e.transaction.amount, e.currency.decimals)} ${e.currency.symbol}` +
-          `, tx ${e.transaction.txHash})`
+    for (const { history: h, transaction: t } of histories) {
+      const token = t
+        ? `  (${formatUnits(t.amount, t.currency.decimals)} ${t.currency.symbol}, tx ${t.txHash})`
         : '';
+      const sign = h.points.startsWith('-') ? '' : '+';
       lines.push(
-        `  ${e.createdAt.toISOString()}  ${e.type.padEnd(8)} ${e.currency.symbol.padEnd(6)}` +
-          ` +${formatPoints(e.points)} → ${formatPoints(e.pointsAfter)} 포인트${token}`,
+        `  ${h.createdAt.toISOString()}  ${h.type.padEnd(8)} ${sign}${formatPoints(h.points)}` +
+          `  ${formatPoints(h.pointsBefore)} → ${formatPoints(h.pointsAfter)} 포인트${token}`,
       );
     }
     this.logger.log(lines.join('\n'));

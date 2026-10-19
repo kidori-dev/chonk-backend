@@ -9,12 +9,11 @@ import {
 import { formatUnits } from 'ethers';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { CurrenciesService } from '../currencies/currencies.service';
 import { formatPoints } from '../currencies/points';
 import { User } from '../users/entities/user.entity';
 import { PointHistoryQueryDto } from './dto/point-history.query.dto';
 import { PointHistoryResponseDto, PointsResponseDto } from './dto/points.response.dto';
-import { LedgerService } from './ledger.service';
+import { UserBalancesService } from './user-balances.service';
 
 /** 로그인한 유저 본인의 포인트 조회 (Authorization: Bearer <accessToken> 필요) */
 @ApiTags('points')
@@ -22,28 +21,14 @@ import { LedgerService } from './ledger.service';
 @ApiUnauthorizedResponse({ description: '토큰이 없거나 유효하지 않음' })
 @Controller('points')
 export class PointsController {
-  constructor(
-    private readonly ledger: LedgerService,
-    private readonly currencies: CurrenciesService,
-  ) {}
+  constructor(private readonly userBalances: UserBalancesService) {}
 
   /** GET /api/points */
   @Get()
-  @ApiOperation({ summary: '내 포인트', description: '등록된 토큰별 포인트. 입금이 없던 토큰은 0' })
+  @ApiOperation({ summary: '내 포인트', description: '입금이 없었으면 0' })
   @ApiOkResponse({ type: PointsResponseDto })
   async getPoints(@CurrentUser() user: User): Promise<PointsResponseDto> {
-    const [currencies, balances] = await Promise.all([
-      this.currencies.findAll(),
-      this.ledger.findBalances(user.id),
-    ]);
-    return {
-      balances: currencies.map((c) => ({
-        symbol: c.symbol,
-        currencyAddress: c.address,
-        points: formatPoints(balances.find((b) => b.currencyId === c.id)?.points ?? '0'),
-        pointRatio: formatPoints(c.pointRatio),
-      })),
-    };
+    return { points: formatPoints(await this.userBalances.findPoints(user.id)) };
   }
 
   /** GET /api/points/history?limit=20&offset=0 */
@@ -54,18 +39,18 @@ export class PointsController {
     @CurrentUser() user: User,
     @Query() query: PointHistoryQueryDto,
   ): Promise<PointHistoryResponseDto> {
-    const entries = await this.ledger.findEntries(user.id, query.limit, query.offset);
+    const histories = await this.userBalances.findHistories(user.id, query.limit, query.offset);
     return {
-      items: entries.map((e) => ({
-        type: e.type,
-        symbol: e.currency.symbol,
-        points: formatPoints(e.points),
-        pointsAfter: formatPoints(e.pointsAfter),
-        tokenAmount: e.transaction
-          ? formatPoints(formatUnits(e.transaction.amount, e.currency.decimals))
-          : null,
-        txHash: e.transaction?.txHash ?? null,
-        createdAt: e.createdAt,
+      items: histories.map(({ history: h, transaction: t }) => ({
+        type: h.type,
+        points: formatPoints(h.points),
+        pointsBefore: formatPoints(h.pointsBefore),
+        pointsAfter: formatPoints(h.pointsAfter),
+        targetId: h.targetId,
+        symbol: t?.currency.symbol ?? null,
+        tokenAmount: t ? formatPoints(formatUnits(t.amount, t.currency.decimals)) : null,
+        txHash: t?.txHash ?? null,
+        createdAt: h.createdAt,
       })),
     };
   }

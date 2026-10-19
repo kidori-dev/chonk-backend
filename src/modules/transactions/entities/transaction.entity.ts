@@ -25,7 +25,8 @@ export type TransactionType = 'deposit';
  */
 @Entity('transactions')
 export class Transaction {
-  @PrimaryGeneratedColumn('uuid')
+  /** bigint identity. pg 가 bigint 를 문자열로 돌려줘서 string 으로 다룬다 */
+  @PrimaryGeneratedColumn('identity', { type: 'bigint', generatedIdentity: 'ALWAYS' })
   id!: string;
 
   @Column({ name: 'chain_id', type: 'integer' })

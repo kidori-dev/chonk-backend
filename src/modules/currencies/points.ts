@@ -2,7 +2,7 @@ import { formatUnits, parseUnits } from 'ethers';
 
 import { Currency } from './entities/currency.entity';
 
-/** 포인트는 소수 6자리까지 쓴다 (user_balances.points, ledger_entries.points) */
+/** 포인트는 소수 6자리까지 쓴다 (user_balances.points, user_balance_histories.points) */
 export const POINT_DECIMALS = 6;
 
 /**

@@ -7,7 +7,6 @@ import { BlocksModule } from '../modules/blocks/blocks.module';
 import { CurrenciesModule } from '../modules/currencies/currencies.module';
 import { DepositAddressesModule } from '../modules/deposit-addresses/deposit-addresses.module';
 import { DepositsModule } from '../modules/deposits/deposits.module';
-import { LedgerModule } from '../modules/ledger/ledger.module';
 import { SweepContractsModule } from '../modules/sweep-contracts/sweep-contracts.module';
 import { SweepsModule } from '../modules/sweeps/sweeps.module';
 import { UsersModule } from '../modules/users/users.module';
@@ -29,6 +28,7 @@ import { SweepCommand } from './sweep.command';
 import { TargetBlockCommand } from './target-block.command';
 import { UserBalanceCommand } from './user-balance.command';
 import { UserCreateCommand } from './user-create.command';
+import { UserBalancesModule } from '../modules/user-balances/user-balances.module';
 
 /** CLI 진입 모듈. 새 커맨드를 만들면 providers 에 추가한다. */
 @Module({
@@ -43,7 +43,7 @@ import { UserCreateCommand } from './user-create.command';
     DepositAddressesModule,
     CurrenciesModule,
     DepositsModule,
-    LedgerModule,
+    UserBalancesModule,
   ],
   providers: [
     PollingBlockCommand,

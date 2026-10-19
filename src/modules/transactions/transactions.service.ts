@@ -3,7 +3,7 @@ import { EntityManager } from 'typeorm';
 
 import { Currency } from '../currencies/entities/currency.entity';
 import { toPoints } from '../currencies/points';
-import { LedgerService } from '../ledger/ledger.service';
+import { UserBalancesService } from '../user-balances/user-balances.service';
 import { Transaction } from './entities/transaction.entity';
 
 /** 새로 기록할 입금 1건 */
@@ -25,7 +25,7 @@ export interface RecordResult {
 /** transactions 테이블 쓰기 */
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly ledger: LedgerService) {}
+  constructor(private readonly userBalances: UserBalancesService) {}
 
   /**
    * 입금을 transactions 에 저장하고 유저 포인트를 올린다. 호출한 쪽의 DB 트랜잭션 안에서 실행된다.
@@ -56,12 +56,11 @@ export class TransactionsService {
       }
 
       const points = toPoints(deposit.amount, currency);
-      await this.ledger.credit(manager, {
+      await this.userBalances.credit(manager, {
         userId: deposit.userId,
-        currencyId: deposit.currencyId,
         points,
         type: 'deposit',
-        transactionId: id,
+        targetId: id,
       });
       result.recorded.push({
         transaction: manager.create(Transaction, { ...deposit, id, type: 'deposit' }),

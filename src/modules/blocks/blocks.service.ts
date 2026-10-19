@@ -47,7 +47,7 @@ export class BlocksService {
         if (previous.status !== 'unfinalized') {
           throw new Error(
             `${previous.status} 상태인 #${previous.number} 블록이 체인에서 바뀌었습니다. ` +
-              '자동으로 고치지 않습니다. 해당 구간의 blocks / transactions / ledger_entries 를 확인하세요.',
+              '자동으로 고치지 않습니다. 해당 구간의 blocks / transactions / user_balance_histories 를 확인하세요.',
           );
         }
         await manager.delete(BlockEntity, { chainId, number: previous.number });

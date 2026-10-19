@@ -12,7 +12,8 @@ import { Sweep } from './sweep.entity';
 /** sweep 에서 실제로 옮긴 금액 1건 = 1행 (입금 주소 하나 × 자산 하나) */
 @Entity('sweep_items')
 export class SweepItem {
-  @PrimaryGeneratedColumn('uuid')
+  /** bigint identity. pg 가 bigint 를 문자열로 돌려줘서 string 으로 다룬다 */
+  @PrimaryGeneratedColumn('identity', { type: 'bigint', generatedIdentity: 'ALWAYS' })
   id!: string;
 
   @Column({ name: 'sweep_id', type: 'uuid' })

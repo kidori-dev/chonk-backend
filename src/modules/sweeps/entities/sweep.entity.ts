@@ -49,18 +49,18 @@ export class Sweep {
   @Column({ name: 'executor_address', type: 'varchar', length: 42 })
   executorAddress!: string;
 
-  @Column({ name: 'tx_hash', type: 'varchar', length: 66 })
-  txHash!: string;
-
-  @Column({ type: 'varchar', length: 10 })
-  status!: SweepStatus;
-
   /** 트랜잭션 nonce. 같은 nonce 를 다른 트랜잭션이 썼으면 이 트랜잭션은 버려진 것이다 */
   @Column({ type: 'integer', nullable: true })
   nonce!: number | null;
 
   @Column({ type: 'jsonb', nullable: true })
   plan!: SweepPlan | null;
+
+  @Column({ name: 'tx_hash', type: 'varchar', length: 66 })
+  txHash!: string;
+
+  @Column({ type: 'varchar', length: 10 })
+  status!: SweepStatus;
 
   @Column({ name: 'block_number', type: 'bigint', nullable: true, transformer: bigintToNumber })
   blockNumber!: number | null;

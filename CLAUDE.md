@@ -27,7 +27,7 @@ npm run cli -- <command> # nest-commander CLI (src/commands)
 
 ## 테스트 / 안전
 
-- 실제 `coin` DB 는 건드리지 않는다. 테스트는 `coin_test` DB 를 만들어 `DB_NAME=coin_test` 로 마이그레이션 후 진행하고 끝나면 DROP.
+- 실제 `chonk` DB 는 건드리지 않는다. 테스트는 `chonk_test` DB 를 만들어 `DB_NAME=chonk_test` 로 마이그레이션 후 진행하고 끝나면 DROP.
 - Postgres 는 docker 컨테이너 `postgres-18`. `docker exec` 로 SQL 을 heredoc 으로 넘길 땐 `-i` 필수.
 - 로컬 체인은 Anvil(`--chain-id 31337`). Anvil 은 URL 경로가 있으면 404 라서 `AlchemyService` 용 프록시가 필요하고, Multicall3 는 `anvil_setCode` 로 넣는다.
 - 사용자가 3000 포트로 서버를 띄워 둘 수 있으니 테스트 서버는 다른 포트를 쓰고 사용자 프로세스는 끄지 않는다.

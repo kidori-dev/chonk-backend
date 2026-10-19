@@ -8,7 +8,7 @@ CREATE2 + Clones
 ```bash
 npm install
 cp .env.example .env   # ALCHEMY_*, CHAIN_ID, DB_*, JWT_SECRET 채우기
-npm run migration:run  # 테이블 생성 (blocks, users, currencies, deposit_addresses, transactions, user_balances, ledger_entries, sweeps ...)
+npm run migration:run  # 테이블 생성 (blocks, users, currencies, deposit_addresses, transactions, user_balances, user_balance_histories, sweeps ...)
 ```
 
 ## 컨트랙트 (contracts/, Foundry)
@@ -68,8 +68,8 @@ npm run start:dev      # http://localhost:3000/api , Swagger 문서: /api/docs (
 | POST | `/api/auth/refresh` | - | `{ refreshToken }` → 새 `accessToken` + 새 `refreshToken` (보낸 토큰은 폐기) |
 | POST | `/api/auth/logout` | - | `{ refreshToken }` → 리프레시 토큰 폐기 |
 | GET | `/api/auth/me` | Bearer | 내 정보 |
-| GET | `/api/points` | Bearer | 내 포인트 (등록된 토큰별, 입금 없던 토큰은 0) |
-| GET | `/api/points/history?limit=20&offset=0` | Bearer | 내 포인트 이력 (최근 것부터, limit 최대 100) |
+| GET | `/api/points` | Bearer | 내 포인트 (유저당 하나, 입금이 없었으면 0) |
+| GET | `/api/points/history?limit=20&offset=0` | Bearer | 내 포인트 이력 (type, 반영 전/후 포인트, 최근 것부터, limit 최대 100) |
 
 - 리프레시 토큰은 1회용이다. 이미 쓴 토큰이 다시 들어오면 탈취로 보고 그 유저의 리프레시 토큰을 전부 폐기한다 (다시 로그인 필요). 로그아웃한 토큰은 예외로 거절만 한다.
 - 만료된 리프레시 토큰은 API 서버가 매일 새벽 4시에 지운다.
@@ -94,7 +94,7 @@ npm run cli -- polling-deposit
 # polling-block 이 지나간 구간에서 빠진 블록 하나를 저장 (앞쪽 블록은 거부. 입금 확인은 polling-deposit 이 한다)
 npm run cli -- target-block 12345678
 
-# 유저 포인트와 최근 원장 보기
+# 유저 포인트와 최근 이력 보기
 npm run cli -- user-balance alice@example.com
 ```
 
@@ -109,7 +109,7 @@ polling-deposit  DEPOSIT_POLL_INTERVAL_MS(60초)마다 노드의 finalized 블�
                  finalized 블록이 DEPOSIT_SCAN_BATCH(10)개 쌓이면
                  eth_getLogs 1회 (그 구간의 등록된 토큰 Transfer 로그)
                  → 받는 주소가 deposit_addresses 면 입금
-                 → transactions 저장 + user_balances.points 증가 + ledger_entries 기록
+                 → transactions 저장 + user_balances.points 증가 + user_balance_histories 기록
                  → 그 구간 blocks.is_scanned = true   (전부 한 DB 트랜잭션)
 ```
 
@@ -117,8 +117,9 @@ polling-deposit  DEPOSIT_POLL_INTERVAL_MS(60초)마다 노드의 finalized 블�
 - **finalized 블록만 입금 확인**: finalized(최종 확정) 블록은 프로토콜상 되돌려지지 않아서, 적립한 포인트가 reorg 로 무효가 되는 일이 없다. 대신 입금 반영이 약 13~15분 걸린다 (이더리움/Sepolia 기준).
 - **reorg**: polling-block 은 최신 블록을 저장하므로 1~2블록짜리 reorg 를 만날 수 있다. 새 블록이 저장된 앞 블록과 이어지지 않으면 앞 블록을 지우고 이어지는 지점까지 되감는다. 아직 입금 확인 전인 블록이라 포인트에는 영향이 없다. (finalized 블록이 뒤집히면 프로토콜상 일어나면 안 되는 일이라 자동으로 고치지 않고 멈춘다)
 - 블록마다 묻지 않고 10개씩 모아서 묻기 때문에 Alchemy 요청이 적다. Alchemy 무료 플랜은 eth_getLogs 한 번에 10블록까지라 기본값이 10 이다.
-- **이중 입금 방지**: transactions 의 `(chain_id, tx_hash, log_index)` 가 유니크라 이미 있는 tx 는 건너뛰고 포인트도 올리지 않는다. 원장도 `(type, transaction_id)` 가 유니크다.
-- **포인트** = 토큰 개수 × `currencies.point_ratio` (소수 6자리 아래는 버림). 예) ratio 1 이면 100 USDT → 100 포인트.
+- **이중 입금 방지**: transactions 의 `(chain_id, tx_hash, log_index)` 가 유니크라 이미 있는 tx 는 건너뛰고 포인트도 올리지 않는다. 이력(user_balance_histories)도 `(type, target_id)` 가 유니크다.
+- **포인트** = 토큰 개수 × `currencies.point_ratio` (소수 6자리 아래는 버림). 예) ratio 1 이면 100 USDT → 100 포인트. 포인트는 토큰별로 나누지 않고 유저당 하나로 쌓인다.
+- **포인트 이력**: `user_balance_histories` 에 `type`(deposit 입금 / withdraw 출금), 바뀐 포인트, 반영 전(`points_before`)/후(`points_after`) 포인트가 남는다.
 - 등록된 토큰이나 입금 주소가 하나도 없으면 polling-deposit 은 블록을 확인 처리하지 않고 기다린다 (등록하면 그때부터 쌓인 블록을 확인).
 - 비활성(`currency-disable`) 토큰도 입금은 계속 기록한다. 토큰 등록 전에 이미 확인된 블록의 그 토큰 입금은 기록되지 않는다.
 - DB 의 모든 테이블/컬럼에 설명(COMMENT)이 달려 있다. DB 툴에서 바로 보인다.
