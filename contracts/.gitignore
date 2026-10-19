@@ -1,0 +1,7 @@
+# Foundry 빌드 결과 / 캐시
+/out
+/cache
+/broadcast
+
+# soldeer 로 받는 의존성 (forge soldeer install 로 다시 받는다)
+/dependencies

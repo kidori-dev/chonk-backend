@@ -1,0 +1,15 @@
+# Foundry 설정. 빌드: forge build / 테스트: forge test (contracts 폴더에서)
+# 빌드 결과(out/SweepFactory.sol/SweepFactory.json)를 Nest CLI 의 sweep-contract-deploy 가 읽어서 배포한다.
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["dependencies"]
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+
+[dependencies]
+"@openzeppelin-contracts" = "5.4.0"
+forge-std = "1.11.0"
