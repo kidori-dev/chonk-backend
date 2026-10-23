@@ -28,6 +28,10 @@ export default () => ({
     apiKey: process.env.ALCHEMY_API_KEY ?? '',
     subApiKey: process.env.ALCHEMY_SUB_API_KEY ?? '',
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS ?? '6000', 10),
+    // 비어 있으면 polling-block 은 웹소켓 없이 HTTP 폴링만 한다
+    wsUrl: process.env.ALCHEMY_WS_URL ?? '',
+    // 웹소켓을 쓸 때 끊김에 대비해 노드에 최신 블록을 물어보는 간격
+    wsFallbackIntervalMs: parseInt(process.env.WS_FALLBACK_INTERVAL_MS ?? '60000', 10),
   },
   database: {
     host: process.env.DB_HOST ?? 'localhost',

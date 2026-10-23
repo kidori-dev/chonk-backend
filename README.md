@@ -102,6 +102,7 @@ npm run cli -- user-balance alice@example.com
 
 ```
 polling-block    최신 블록 저장 (blocks.status = unfinalized)
+                 ALCHEMY_WS_URL 이 있으면 웹소켓 newHeads 로 새 블록을 바로 알고 (없으면 POLL_INTERVAL_MS 마다 HTTP 폴링)
                  reorg 면 빠진 unfinalized 블록을 지우고 되감아서 다시 받는다
       ↓
 polling-deposit  DEPOSIT_POLL_INTERVAL_MS(60초)마다 노드의 finalized 블록을 확인하고
@@ -115,6 +116,7 @@ polling-deposit  DEPOSIT_POLL_INTERVAL_MS(60초)마다 노드의 finalized 블�
 
 - **블록 상태**: `status` = `unfinalized`(저장됨, 아직 바뀔 수 있음) → `finalized`(최종 확정). `is_scanned` = 입금 확인을 끝냈는지. polling-deposit 은 `finalized` 이고 `is_scanned = false` 인 블록을 확인한다.
 - **finalized 블록만 입금 확인**: finalized(최종 확정) 블록은 프로토콜상 되돌려지지 않아서, 적립한 포인트가 reorg 로 무효가 되는 일이 없다. 대신 입금 반영이 약 13~15분 걸린다 (이더리움/Sepolia 기준).
+- **새 블록 감지**: 웹소켓은 "새 블록이 나왔다"는 신호로만 쓰고, 블록 내용은 HTTP `getBlock` 으로 받아 저장한다. 웹소켓이 끊기면 5초 뒤 다시 연결하고(연결이 안 되면 메인 ↔ 서브 키 번갈아), 끊긴 동안의 블록은 다음 신호나 `WS_FALLBACK_INTERVAL_MS`(60초)마다의 HTTP 확인 때 빠짐없이 채운다.
 - **reorg**: polling-block 은 최신 블록을 저장하므로 1~2블록짜리 reorg 를 만날 수 있다. 새 블록이 저장된 앞 블록과 이어지지 않으면 앞 블록을 지우고 이어지는 지점까지 되감는다. 아직 입금 확인 전인 블록이라 포인트에는 영향이 없다. (finalized 블록이 뒤집히면 프로토콜상 일어나면 안 되는 일이라 자동으로 고치지 않고 멈춘다)
 - 블록마다 묻지 않고 10개씩 모아서 묻기 때문에 Alchemy 요청이 적다. Alchemy 무료 플랜은 eth_getLogs 한 번에 10블록까지라 기본값이 10 이다.
 - **이중 입금 방지**: transactions 의 `(chain_id, tx_hash, log_index)` 가 유니크라 이미 있는 tx 는 건너뛰고 포인트도 올리지 않는다. 이력(user_balance_histories)도 `(type, target_id)` 가 유니크다.

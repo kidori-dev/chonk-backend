@@ -14,6 +14,7 @@ import {
   TransactionResponse,
   Wallet,
 } from 'ethers';
+import WebSocket from 'ws';
 
 import { errorMessage } from '../../common/errors';
 
@@ -26,6 +27,11 @@ export const MULTICALL3_ABI = [
   'function aggregate3((address target, bool allowFailure, bytes callData)[] calls) view returns ((bool success, bytes returnData)[])',
 ];
 const MULTICALL_CHUNK_SIZE = 500;
+
+// 웹소켓이 끊기면 이만큼 기다렸다가 다시 연결한다
+const WS_RECONNECT_MS = 5000;
+// 이 간격으로 ping 을 보내고, 다음 ping 때까지 pong 이 없으면 죽은 연결로 보고 끊는다
+const WS_PING_INTERVAL_MS = 30000;
 
 export interface MulticallCall {
   target: string;
@@ -48,12 +54,17 @@ export class AlchemyService {
   private readonly logger = new Logger(AlchemyService.name);
   private readonly mainRpc: JsonRpcProvider;
   private readonly subRpc: JsonRpcProvider | null;
+  private readonly wsUrl: string;
+  // 웹소켓 연결에 쓸 키 [메인, 서브]. 서브 키가 비어 있으면 메인만
+  private readonly apiKeys: string[];
 
   constructor(config: ConfigService) {
     const url = config.get<string>('alchemy.url')!;
     const apiKey = config.get<string>('alchemy.apiKey')!;
     const subApiKey = config.get<string>('alchemy.subApiKey');
     const chainId = config.get<number>('alchemy.chainId')!;
+    this.wsUrl = config.get<string>('alchemy.wsUrl') ?? '';
+    this.apiKeys = subApiKey ? [apiKey, subApiKey] : [apiKey];
 
     this.mainRpc = createRpc(url, apiKey, chainId);
     // 서브 키가 비어 있으면 대체 없이 메인 키만 쓴다
@@ -159,6 +170,85 @@ export class AlchemyService {
     return this.request((rpc) => rpc.getLogs(filter));
   }
 
+  /**
+   * 새 블록이 생길 때마다 onBlock(블록 번호)을 부른다 (웹소켓 eth_subscribe newHeads).
+   * ALCHEMY_WS_URL 이 비어 있으면 아무것도 하지 않고 false 를 돌려준다.
+   *
+   * - 연결이 끊기면 WS_RECONNECT_MS 뒤 다시 연결한다. 연결 자체가 안 되면 메인 ↔ 서브 키를 번갈아 쓴다.
+   * - 끊긴 동안 생긴 블록은 알려주지 않는다. 받는 쪽이 번호를 보고 빠진 블록을 채워야 한다.
+   */
+  watchNewHeads(onBlock: (blockNumber: number) => void): boolean {
+    if (!this.wsUrl) {
+      return false;
+    }
+    let keyIndex = 0;
+
+    const connect = () => {
+      const keyName = keyIndex === 0 ? '메인' : '서브';
+      const ws = new WebSocket(joinUrl(this.wsUrl, this.apiKeys[keyIndex]));
+      let opened = false;
+      let alive = true;
+      let pingTimer: NodeJS.Timeout | undefined;
+
+      ws.on('open', () => {
+        opened = true;
+        ws.send(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_subscribe', params: ['newHeads'] }),
+        );
+        this.logger.log(`웹소켓 연결 → newHeads 구독 (${keyName} 키)`);
+
+        pingTimer = setInterval(() => {
+          if (!alive) {
+            this.logger.warn('웹소켓 응답 없음 → 연결을 끊습니다');
+            ws.terminate();
+            return;
+          }
+          alive = false;
+          ws.ping();
+        }, WS_PING_INTERVAL_MS);
+      });
+      ws.on('pong', () => {
+        alive = true;
+      });
+
+      ws.on('message', (data) => {
+        alive = true;
+        try {
+          const msg = JSON.parse(data.toString()) as {
+            method?: string;
+            params?: { result?: { number?: string } };
+            error?: { message?: string };
+          };
+          if (msg.error) {
+            // 구독 요청이 거절됐다 (키 오류 등). 끊고 다시 연결한다
+            this.logger.warn(`newHeads 구독 실패: ${msg.error.message}`);
+            ws.close();
+          } else if (msg.method === 'eth_subscription' && msg.params?.result?.number) {
+            onBlock(Number(msg.params.result.number));
+          }
+        } catch (err) {
+          this.logger.warn(`웹소켓 메시지 처리 실패: ${errorMessage(err)}`);
+        }
+      });
+
+      // 오류 뒤에는 항상 close 가 오므로 다시 연결은 close 에서 한다
+      ws.on('error', (err) =>
+        this.logger.warn(`웹소켓 오류 (${keyName} 키): ${errorMessage(err)}`),
+      );
+      ws.on('close', () => {
+        clearInterval(pingTimer);
+        if (!opened) {
+          keyIndex = (keyIndex + 1) % this.apiKeys.length;
+        }
+        this.logger.warn(`웹소켓 끊김 → ${WS_RECONNECT_MS}ms 뒤 다시 연결`);
+        setTimeout(connect, WS_RECONNECT_MS);
+      });
+    };
+
+    connect();
+    return true;
+  }
+
   /** 메인 키로 요청하고, 실패하면 서브 키로 다시 요청한다 */
   private async request<T>(call: (rpc: JsonRpcProvider) => Promise<T>): Promise<T> {
     try {
@@ -180,11 +270,16 @@ export class AlchemyService {
 
 /** url 과 키를 합쳐 RPC 클라이언트를 만든다. 예) https://eth-sepolia.g.alchemy.com/v2 + /<키> */
 function createRpc(url: string, apiKey: string, chainId: number): JsonRpcProvider {
-  const request = new FetchRequest(`${url.replace(/\/+$/, '')}/${apiKey}`);
+  const request = new FetchRequest(joinUrl(url, apiKey));
   // ethers 는 사용량 초과(429) 시 자체적으로 여러 번 재시도한다. 바로 실패시켜 서브 키로 넘긴다.
   request.setThrottleParams({ maxAttempts: 1 });
   // 체인을 직접 알려준다. 안 알려주면 ethers 가 노드에 체인을 물어보는데,
   // 키가 막혀 있으면 이 확인을 에러 없이 무한 재시도해서 서브 키로 넘어가지 못한다.
   const network = Network.from(chainId);
   return new JsonRpcProvider(request, network, { staticNetwork: network });
+}
+
+/** url 끝에 키를 붙인다. 예) wss://eth-sepolia.g.alchemy.com/v2 + <키> → .../v2/<키> */
+function joinUrl(url: string, apiKey: string): string {
+  return `${url.replace(/\/+$/, '')}/${apiKey}`;
 }

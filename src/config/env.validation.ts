@@ -15,6 +15,13 @@ export const envValidationSchema = Joi.object({
   ALCHEMY_API_KEY: Joi.string().required(),
   ALCHEMY_SUB_API_KEY: Joi.string().allow('').default(''),
   POLL_INTERVAL_MS: Joi.number().min(100).default(3000),
+  // polling-block 이 새 블록을 바로 알기 위한 웹소켓 주소 (키 제외). 비우면 HTTP 폴링만 한다
+  ALCHEMY_WS_URL: Joi.string()
+    .uri({ scheme: ['ws', 'wss'] })
+    .allow('')
+    .default(''),
+  // 웹소켓을 쓸 때 끊김에 대비해 노드에 최신 블록을 물어보는 간격(ms)
+  WS_FALLBACK_INTERVAL_MS: Joi.number().integer().min(1000).default(60000),
   // polling-deposit 이 finalized 블록을 확인하는 간격(ms)
   DEPOSIT_POLL_INTERVAL_MS: Joi.number().integer().min(1000).default(60000),
   // polling-deposit 이 eth_getLogs 한 번에 확인할 블록 수. Alchemy 무료 플랜은 한 번에 10블록까지만 된다
