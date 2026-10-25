@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -109,18 +108,23 @@ contract SweepFactoryTest is Test {
         DepositWallet(payable(wallet)).sweepToken(IERC20(address(token)), stranger);
     }
 
-    /// 입금 지갑과 원본(implementation)은 다시 초기화할 수 없다
-    function test_CannotReinitialize() public {
+    /// factory 가 여러 개여도 각자 자기 원본을 쓰고, 다른 factory 의 Clone 은 움직일 수 없다
+    function test_FactoriesAreIsolated() public {
+        SweepFactory other = new SweepFactory(owner, treasury);
+        assertTrue(other.implementation() != factory.implementation());
+        assertEq(DepositWallet(payable(factory.implementation())).factory(), address(factory));
+        assertEq(DepositWallet(payable(other.implementation())).factory(), address(other));
+
+        // 같은 salt 라도 factory 가 다르면 주소가 다르다
+        assertTrue(other.predictAddress(salt) != factory.predictAddress(salt));
+
         vm.prank(owner);
         address wallet = factory.deployWallet(salt);
-        // expectRevert 는 바로 다음 외부 호출에 걸리므로, implementation() 조회를 미리 해둔다
-        address implementation = factory.implementation();
+        token.mint(wallet, 10e6);
 
-        vm.expectRevert(Initializable.InvalidInitialization.selector);
-        DepositWallet(payable(wallet)).initialize(stranger);
-
-        vm.expectRevert(Initializable.InvalidInitialization.selector);
-        DepositWallet(payable(implementation)).initialize(stranger);
+        vm.prank(address(other));
+        vm.expectRevert(DepositWallet.OnlyFactory.selector);
+        DepositWallet(payable(wallet)).sweepToken(IERC20(address(token)), stranger);
     }
 
     /// 같은 salt 로 두 번 배포할 수 없다

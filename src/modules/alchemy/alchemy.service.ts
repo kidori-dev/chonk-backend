@@ -149,17 +149,6 @@ export class AlchemyService {
     return new Wallet(privateKey, this.mainRpc);
   }
 
-  /**
-   * finalized(최종 확정) 블록. 이 블록까지는 프로토콜상 되돌려지지 않는다 (이더리움은 약 13분 전 블록)
-   */
-  async getFinalizedBlock(): Promise<Block> {
-    const block = await this.request((rpc) => rpc.getBlock('finalized'));
-    if (!block) {
-      throw new Error('노드가 finalized 블록을 알려주지 않습니다.');
-    }
-    return block;
-  }
-
   /** 블록 하나를 조회한다. 아직 없는 블록이면 null */
   getBlock(blockNumber: number): Promise<Block | null> {
     return this.request((rpc) => rpc.getBlock(blockNumber));

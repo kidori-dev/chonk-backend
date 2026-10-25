@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, QueryFailedError, Repository } from 'typeorm';
 
 import { AlchemyService } from '../alchemy/alchemy.service';
 import { SweepContract } from '../sweep-contracts/entities/sweep-contract.entity';
@@ -78,6 +78,24 @@ export class DepositAddressesService {
     return results;
   }
 
+  /**
+   * 유저 한 명의 입금 주소 (없으면 발급). 처음 발급할 때만 Alchemy 에 한 번 묻는다 (predictAddress).
+   * 동시에 두 번 요청돼 한쪽이 유니크 제약에 걸리면 먼저 저장된 주소를 돌려준다
+   */
+  async findOrIssue(userId: string): Promise<DepositAddress> {
+    try {
+      return (await this.issue([userId]))[0].depositAddress;
+    } catch (err) {
+      if (
+        err instanceof QueryFailedError &&
+        (err.driverError as { code?: string }).code === '23505'
+      ) {
+        return (await this.findByUserIds([userId]))[0];
+      }
+      throw err;
+    }
+  }
+
   /** 현재 factory 기준 입금 주소가 아직 없는 유저 id 목록 */
   async findUserIdsWithoutAddress(): Promise<string[]> {
     const factory = await this.currentFactory();
@@ -96,11 +114,11 @@ export class DepositAddressesService {
   }
 
   /**
-   * 현재 factory 기준 유저들의 입금 주소 (userIds 순서대로, 유저 정보 포함).
+   * factory 기준 유저들의 입금 주소 (userIds 순서대로, 유저 정보 포함). factory 를 안 주면 현재 factory.
    * 입금 주소가 발급되지 않은 유저가 하나라도 있으면 에러.
    */
-  async findByUserIds(userIds: string[]): Promise<DepositAddress[]> {
-    const factory = await this.currentFactory();
+  async findByUserIds(userIds: string[], factory?: SweepContract): Promise<DepositAddress[]> {
+    factory ??= await this.currentFactory();
     // uuid 형식이 아닌 값은 DB 에 물어보기 전에 걸러낸다 (발급 안 된 유저로 처리)
     const validIds = userIds.filter((id) => UUID_PATTERN.test(id));
     const found =
@@ -136,9 +154,9 @@ export class DepositAddressesService {
     });
   }
 
-  /** 현재 factory 기준으로 발급된 입금 주소 전체 (유저 정보 포함, 발급 순) */
-  async findAll(): Promise<DepositAddress[]> {
-    const factory = await this.currentFactory();
+  /** factory 기준으로 발급된 입금 주소 전체 (유저 정보 포함, 발급 순). factory 를 안 주면 현재 factory */
+  async findAll(factory?: SweepContract): Promise<DepositAddress[]> {
+    factory ??= await this.currentFactory();
     return this.depositAddresses.find({
       where: { chainId: factory.chainId, factoryAddress: factory.factoryAddress },
       relations: { user: true },
@@ -146,14 +164,33 @@ export class DepositAddressesService {
     });
   }
 
+  /** 이 체인의 현재 SweepFactory (가장 최근 배포). 아직 배포 전이면 null */
+  async findCurrentFactory(): Promise<SweepContract | null> {
+    const [factory] = await this.sweepContracts.findByChain(
+      this.config.get<number>('alchemy.chainId')!,
+    );
+    return factory ?? null;
+  }
+
   /** 이 체인의 현재 SweepFactory (가장 최근 배포) */
   async currentFactory(): Promise<SweepContract> {
     const chainId = this.config.get<number>('alchemy.chainId')!;
-    const [factory] = await this.sweepContracts.findByChain(chainId);
+    const factory = await this.findCurrentFactory();
     if (!factory) {
       throw new Error(
         `체인 ${chainId} 에 배포된 SweepFactory 가 없습니다. 먼저 sweep-contract-deploy 를 실행하세요.`,
       );
+    }
+    return factory;
+  }
+
+  /** 이 체인에 배포했던 SweepFactory 중 address 인 것 (예전 factory 포함) */
+  async findFactory(address: string): Promise<SweepContract> {
+    const chainId = this.config.get<number>('alchemy.chainId')!;
+    const factories = await this.sweepContracts.findByChain(chainId);
+    const factory = factories.find((f) => f.factoryAddress.toLowerCase() === address.toLowerCase());
+    if (!factory) {
+      throw new Error(`체인 ${chainId} 에 배포한 SweepFactory 중 ${address} 가 없습니다.`);
     }
     return factory;
   }

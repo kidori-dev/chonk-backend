@@ -6,13 +6,6 @@ const bigintToNumber = {
   from: (value: string): number => Number(value),
 };
 
-/**
- * 블록 상태 (체인 기준)
- * - unfinalized: polling-block 이 저장한 블록. 아직 reorg 로 바뀔 수 있다 (polling-block 이 되감을 수 있다)
- * - finalized:   polling-deposit 이 노드의 finalized 블록과 맞춰 확정한 블록. 더는 바뀌지 않는다
- */
-export type BlockStatus = 'unfinalized' | 'finalized';
-
 /** 저장한 블록 한 개 = 한 행. (chain_id, number) 가 PK */
 @Entity('blocks')
 export class BlockEntity {
@@ -35,11 +28,7 @@ export class BlockEntity {
   @Column({ name: 'block_time', type: 'timestamptz' })
   blockTime!: Date;
 
-  /** 블록 상태 (BlockStatus 참고) */
-  @Column({ type: 'varchar', length: 12, default: 'unfinalized' })
-  status!: BlockStatus;
-
-  /** polling-deposit 이 이 블록의 입금(Transfer 로그)을 확인했는지. finalized 블록만 확인한다 */
+  /** polling-deposit 이 이 블록의 입금(Transfer 로그)을 확인했는지. 최신 블록에서 DEPOSIT_CONFIRMATIONS 만큼 지난 블록만 확인한다 */
   @Column({ name: 'is_scanned', type: 'boolean', default: false })
   isScanned!: boolean;
 
@@ -47,7 +36,7 @@ export class BlockEntity {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
-  /** 마지막으로 바뀐 시각 (status / is_scanned 변경 등) */
+  /** 마지막으로 바뀐 시각 (is_scanned 변경 등) */
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 }

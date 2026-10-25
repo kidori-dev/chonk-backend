@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { formatUnits, getAddress, id, Log } from 'ethers';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, LessThanOrEqual, Repository } from 'typeorm';
 
 import { AlchemyService } from '../alchemy/alchemy.service';
 import { BlockEntity } from '../blocks/entities/block.entity';
@@ -41,7 +41,7 @@ export interface LogScanResult extends RecordResult {
 /**
  * 토큰 입금 감지.
  *
- * 1. status = finalized 이고 is_scanned = false 인 블록(입금 확인 대기)을 모은다
+ * 1. 최신 블록에서 DEPOSIT_CONFIRMATIONS(기본 10) 이상 뒤에 있고 is_scanned = false 인 블록(입금 확인 대기)을 모은다
  * 2. eth_getLogs 한 번으로 그 구간의 등록된 토큰 Transfer 로그를 받는다
  * 3. 받는 주소(to)가 입금 주소인 로그만 transactions 에 저장하고 유저 포인트를 올린다
  *    (이미 있는 tx 는 건너뛴다 → 같은 구간을 다시 확인해도 이중 입금이 되지 않는다)
@@ -74,15 +74,26 @@ export class DepositScannerService {
   }
 
   /**
-   * finalized 블록이 batchSize 개 이상 쌓였으면, 가장 오래된 것부터 batchSize 개
-   * (번호가 이어지는 구간만)를 eth_getLogs 한 번으로 확인하고 is_scanned = true 로 바꾼다.
+   * 확인할 블록(최신 블록 - confirmations 이하, is_scanned = false)이 batchSize 개 이상 쌓였으면,
+   * 가장 오래된 것부터 batchSize 개(번호가 이어지는 구간만)를 eth_getLogs 한 번으로 확인하고 is_scanned = true 로 바꾼다.
    * 덜 쌓였거나, 등록된 토큰 / 입금 주소가 아직 없으면 null (확인하지 않고 기다린다).
    *
-   * finalized 블록은 되돌려지지 않으므로, 여기서 적립한 포인트가 reorg 로 무효가 되는 일은 없다.
+   * finalized 전이라 프로토콜상으로는 뒤집힐 수 있지만, 10블록 넘는 reorg 는 사실상 일어나지 않는다.
+   * 만약 확인을 끝낸 블록이 바뀌면 polling-block 이 자동으로 고치지 않고 멈춘다 (BlocksService.saveBlock).
    */
   async scanLogs(batchSize: number): Promise<LogScanResult | null> {
     const chainId = this.config.get<number>('alchemy.chainId')!;
-    const ready = { chainId, status: 'finalized' as const, isScanned: false };
+    const confirmations = this.config.get<number>('deposit.confirmations')!;
+    // 기준은 DB 에 저장된 최신 블록 (polling-block 이 늦어도 그만큼 더 보수적으로 확인할 뿐이다)
+    const latest = await this.blocks.findOne({ where: { chainId }, order: { number: 'DESC' } });
+    if (!latest) {
+      return null;
+    }
+    const ready = {
+      chainId,
+      isScanned: false,
+      number: LessThanOrEqual(latest.number - confirmations),
+    };
     if ((await this.blocks.countBy(ready)) < batchSize) {
       return null;
     }

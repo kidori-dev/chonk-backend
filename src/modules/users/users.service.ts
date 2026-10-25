@@ -1,7 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 
 import { User } from './entities/user.entity';
 
@@ -27,13 +27,24 @@ export class UsersService {
       throw new ConflictException(`이미 존재하는 이메일입니다: ${email}`);
     }
 
-    return this.users.save(
-      this.users.create({
-        email,
-        passwordHash: await bcrypt.hash(input.password, UsersService.SALT_ROUNDS),
-        name: input.name ?? null,
-      }),
-    );
+    try {
+      return await this.users.save(
+        this.users.create({
+          email,
+          passwordHash: await bcrypt.hash(input.password, UsersService.SALT_ROUNDS),
+          name: input.name ?? null,
+        }),
+      );
+    } catch (err) {
+      // 같은 이메일로 동시에 가입하면 위 확인을 둘 다 지나칠 수 있다. 유니크 제약이 막아 준다
+      if (
+        err instanceof QueryFailedError &&
+        (err.driverError as { code?: string }).code === '23505'
+      ) {
+        throw new ConflictException(`이미 존재하는 이메일입니다: ${email}`);
+      }
+      throw err;
+    }
   }
 
   findById(id: string): Promise<User | null> {

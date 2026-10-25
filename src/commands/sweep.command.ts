@@ -6,6 +6,7 @@ import {
   ContractTransactionResponse,
   formatEther,
   formatUnits,
+  Interface,
   isError,
 } from 'ethers';
 import { Command, CommandRunner, Option } from 'nest-commander';
@@ -23,7 +24,11 @@ import { SweepsService } from '../modules/sweeps/sweeps.service';
 
 interface SweepOptions {
   currency?: string[];
+  factory?: string;
+  all?: boolean;
 }
+
+const erc20 = new Interface(ERC20_ABI);
 
 /** sweep 할 입금 주소 하나와 currency 별 잔액 (balances[i] 는 currencies[i] 의 잔액) */
 interface SweepTarget {
@@ -33,25 +38,32 @@ interface SweepTarget {
 }
 
 /**
- * 사용법: npm run cli -- sweep <유저 id...> [--currency <심볼>]...
+ * 사용법: npm run cli -- sweep <유저 id...> [--currency <심볼>]... [--factory <주소>]
+ *        npm run cli -- sweep --all [--currency <심볼>]... [--factory <주소>]
  * 예)    npm run cli -- sweep <유저id1> <유저id2>            (등록된 currency 전체)
  *        npm run cli -- sweep <유저id1> -c USDT              (USDT 만)
+ *        npm run cli -- sweep <유저id1> -f 0x1234...         (예전 factory 로 발급된 입금 주소)
+ *        npm run cli -- sweep --all                          (잔액 있는 입금 주소 전체)
  *
  * 유저들의 입금 주소(deposit_addresses) 잔액을 treasury 로 모은다.
+ * --all 이면 그 factory 로 발급된 입금 주소 전체에서 최소 sweep 금액 이상인 주소를 골라 모은다
+ * (잔액은 balances 처럼 Multicall3 로 한 번에 조회해서 걸러내고, 걸러진 주소만 하나씩 확인한다).
  * 입금 주소가 발급된 유저만, currencies 에 등록·활성화된 자산만 다룬다.
+ * --factory 를 안 주면 현재(가장 최근 배포) factory 의 입금 주소를 다룬다.
+ * factory 를 새로 배포해도 예전 주소로 들어온 돈은 --factory 로 예전 factory 를 지정해서 모은다.
  *
  * 1. 입금 주소별 잔액, 예상 가스비를 보여준다 (잔액이 없거나 최소 sweep 금액 미만인 주소/자산은 뺀다)
  * 2. "yes" 를 입력해야 실제로 실행한다
  * 3. 트랜잭션 한 번으로 처리한다. 아직 배포 안 된 입금 주소는 이때 Clone 이 배포된다
  * 4. 결과를 sweeps(트랜잭션) / sweep_items(옮긴 금액) 테이블에 저장한다
  *
- * .env 의 DEPLOYER_PRIVATE_KEY(= 컨트랙트 owner)로 실행한다.
+ * .env 의 DEPLOYER_PRIVATE_KEY(= 그 factory 의 owner)로 실행한다.
  */
 @Command({
   name: 'sweep',
-  arguments: '<userIds...>',
+  arguments: '[userIds...]',
   description:
-    '유저들의 입금 주소 잔액을 treasury 로 모은다. 예) sweep <유저id...> [-c USDT -c USDC]',
+    '유저들의 입금 주소 잔액을 treasury 로 모은다. 예) sweep <유저id...> | sweep --all [-c USDT -c USDC] [-f <factory>]',
 })
 export class SweepCommand extends CommandRunner {
   private readonly logger = new Logger(SweepCommand.name);
@@ -68,6 +80,9 @@ export class SweepCommand extends CommandRunner {
 
   async run(userIds: string[], options: SweepOptions): Promise<void> {
     // 1. 준비물 확인
+    if (options.all ? userIds.length > 0 : userIds.length === 0) {
+      throw new Error('유저 id 를 주거나 --all 을 주세요 (둘 중 하나만).');
+    }
     const privateKey = this.config.get<string>('deploy.privateKey');
     if (!privateKey) {
       throw new Error('.env 의 DEPLOYER_PRIVATE_KEY(컨트랙트 owner 키)가 비어 있습니다.');
@@ -79,7 +94,11 @@ export class SweepCommand extends CommandRunner {
       throw new Error(`노드의 체인 ID(${nodeChainId})가 .env 의 CHAIN_ID(${chainId})와 다릅니다.`);
     }
 
-    const sweepContract = await this.depositAddresses.currentFactory();
+    const current = await this.depositAddresses.currentFactory();
+    const sweepContract = options.factory
+      ? await this.depositAddresses.findFactory(options.factory)
+      : current;
+    const isCurrent = sweepContract.id === current.id;
     const wallet = this.alchemy.createWallet(privateKey);
     const factory = new Contract(sweepContract.factoryAddress, SWEEP_FACTORY_ABI, wallet);
     const [owner, treasury] = (await Promise.all([factory.owner(), factory.treasury()])) as [
@@ -94,7 +113,9 @@ export class SweepCommand extends CommandRunner {
 
     // 2. 대상: 등록된 currency, 발급된 입금 주소만 (아니면 여기서 에러)
     const currencies = await this.currencies.findActive(options.currency);
-    const depositAddresses = await this.depositAddresses.findByUserIds([...new Set(userIds)]);
+    const depositAddresses = options.all
+      ? await this.findSweepable(await this.depositAddresses.findAll(sweepContract), currencies)
+      : await this.depositAddresses.findByUserIds([...new Set(userIds)], sweepContract);
     const deposits = await Promise.all(
       depositAddresses.map((d) => this.loadTarget(d, factory, currencies)),
     );
@@ -111,7 +132,7 @@ export class SweepCommand extends CommandRunner {
       '',
       '======================== sweep ========================',
       `체인 ID   : ${chainId}`,
-      `factory   : ${sweepContract.factoryAddress}`,
+      `factory   : ${sweepContract.factoryAddress} ${isCurrent ? '(현재)' : '(예전 factory)'}`,
       `treasury  : ${treasury} (여기로 모인다)`,
       `실행 계정 : ${owner} (가스비를 낸다)`,
       `자산      : ${currencies
@@ -235,6 +256,34 @@ export class SweepCommand extends CommandRunner {
   }
 
   /**
+   * --all: 입금 주소 × currency 잔액을 Multicall3 로 한 번에 조회해서, 최소 sweep 금액 이상인 잔액이 있는 주소만 남긴다.
+   * 주소가 많아도 RPC 호출이 적다 (남은 주소만 loadTarget 으로 하나씩 다시 확인한다).
+   */
+  private async findSweepable(
+    depositAddresses: DepositAddress[],
+    currencies: Currency[],
+  ): Promise<DepositAddress[]> {
+    if (depositAddresses.length === 0 || currencies.length === 0) {
+      return [];
+    }
+    const results = await this.alchemy.multicall(
+      depositAddresses.flatMap((d) =>
+        currencies.map((c) => ({
+          target: c.address,
+          callData: erc20.encodeFunctionData('balanceOf', [d.address]),
+        })),
+      ),
+    );
+    return depositAddresses.filter((_, i) =>
+      currencies.some((c, j) => {
+        const r = results[i * currencies.length + j];
+        // 조회에 실패한 잔액은 0 으로 보고 넘어간다 (다음 sweep 때 다시 본다)
+        return r.success && r.returnData.length === 66 && isSweepable(BigInt(r.returnData), c);
+      }),
+    );
+  }
+
+  /**
    * 입금 주소의 배포 여부와 currency 별 잔액을 읽는다.
    * DB 에 저장된 주소가 컨트랙트가 계산한 주소와 다르면 멈춘다 (엉뚱한 주소를 보여주고 sweep 하지 않도록).
    */
@@ -266,6 +315,22 @@ export class SweepCommand extends CommandRunner {
   })
   parseCurrency(value: string, previous: string[] = []): string[] {
     return [...previous, value];
+  }
+
+  @Option({
+    flags: '-a, --all',
+    description: '유저 id 대신, 최소 sweep 금액 이상인 잔액이 있는 입금 주소 전체를 모은다',
+  })
+  parseAll(): boolean {
+    return true;
+  }
+
+  @Option({
+    flags: '-f, --factory <address>',
+    description: '대상 SweepFactory 주소 (sweep_contracts 에 있는 것). 생략하면 현재 factory',
+  })
+  parseFactory(value: string): string {
+    return value;
   }
 }
 

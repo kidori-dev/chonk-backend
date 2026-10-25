@@ -11,7 +11,7 @@ import { BlocksService } from '../modules/blocks/blocks.service';
  * 사용법: npm run cli -- polling-block
  *
  * 최신 블록을 따라가며 blocks 테이블에 저장한다. Ctrl+C 로 종료한다.
- * 블록은 unfinalized 로 저장되고, polling-deposit 이 finalized 로 바꾼 뒤 토큰 입금을 확인한다 (blocks.status, is_scanned).
+ * polling-deposit 이 10블록 지난 블록의 토큰 입금을 확인한다 (blocks.is_scanned).
  *
  * - 시작 위치: blocks 테이블이 비어 있으면 지금 최신 블록부터, 있으면 마지막 저장 블록 다음부터
  *   (그사이 밀린 블록을 빠짐없이 백필한다)

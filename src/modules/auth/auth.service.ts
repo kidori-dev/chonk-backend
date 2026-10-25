@@ -49,6 +49,17 @@ export class AuthService {
     return { tokens: await this.issueTokens(user), user };
   }
 
+  /** 회원가입. 유저를 만들고 바로 로그인한 것처럼 토큰을 발급한다. 이미 있는 이메일이면 409 */
+  async register(input: {
+    email: string;
+    password: string;
+    name?: string;
+  }): Promise<{ tokens: TokenResponseDto; user: User }> {
+    const user = await this.users.create(input);
+    await this.users.touchLastLogin(user.id);
+    return { tokens: await this.issueTokens(user), user };
+  }
+
   /** 리프레시 토큰을 새 액세스 토큰 + 새 리프레시 토큰으로 바꾼다 (쓴 리프레시 토큰은 폐기) */
   async refresh(refreshToken: string): Promise<TokenResponseDto> {
     const userId = await this.refreshTokens.consume(refreshToken);

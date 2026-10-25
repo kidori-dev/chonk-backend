@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
+import { SocketIoAdapter } from './common/socket-io.adapter';
 import { setupSwagger } from './swagger.setup';
 
 /** API 서버 진입점. 예) npm run start:dev */
@@ -17,6 +18,9 @@ async function bootstrap(): Promise<void> {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
+
+  // 게임 화면 소켓 (Socket.IO, 같은 포트의 /socket.io). 프론트 주소만 붙을 수 있다
+  app.useWebSocketAdapter(new SocketIoAdapter(app, config.get<string[]>('socketCorsOrigins')!));
 
   // production 이 아닐 때만 /api/docs 에 Swagger 문서를 띄운다
   setupSwagger(app);

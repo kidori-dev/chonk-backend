@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -12,12 +11,15 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  * - 이 컨트랙트 자체(원본, implementation)는 직접 쓰지 않는다. 로직만 빌려주고 Clone 들이 호출을 위임한다.
  * - 각 Clone 은 자기 잔액만 가진다. 돈을 옮길 수 있는 건 자기를 만든 SweepFactory 뿐이다.
  * - Clone 이 배포되기 전에도 주소는 미리 계산되므로, 그 주소로 먼저 입금받아도 된다.
+ * - factory 는 immutable 이라 원본 바이트코드에 박힌다. Clone 은 원본 코드를 빌려 실행하므로 같은 값을 읽고,
+ *   storage 에 쓰는 초기화(initialize)가 없어 Clone 배포비가 싸다.
+ *   SweepFactory 는 자기 원본을 따로 배포하므로 factory 가 여러 개여도 각자의 Clone 만 움직일 수 있다.
  */
-contract DepositWallet is Initializable {
+contract DepositWallet {
     using SafeERC20 for IERC20;
 
     /// @notice 이 지갑을 만든 SweepFactory. 이 주소만 sweep 을 호출할 수 있다
-    address public factory;
+    address public immutable factory;
 
     error OnlyFactory();
     error NativeTransferFailed();
@@ -27,14 +29,9 @@ contract DepositWallet is Initializable {
         _;
     }
 
-    /// @dev 원본(implementation)은 초기화할 수 없게 막는다. Clone 만 initialize 된다
+    /// @dev 원본은 SweepFactory 생성자에서 배포되므로 msg.sender 가 곧 factory 다
     constructor() {
-        _disableInitializers();
-    }
-
-    /// @notice Clone 을 만든 직후 SweepFactory 가 한 번 호출한다
-    function initialize(address factory_) external initializer {
-        factory = factory_;
+        factory = msg.sender;
     }
 
     /// @notice Clone 이 배포된 뒤에도 ETH 를 받을 수 있게 한다

@@ -2,20 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Block } from 'ethers';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 
 import { BlockEntity } from './entities/block.entity';
 
 /** saveBlock 결과: 저장했거나, reorg 라서 앞 블록을 지우고 한 칸 물러났거나 */
 export type SaveBlockResult = 'saved' | 'rolled-back';
-
-/** markFinalized 결과 */
-export type MarkFinalizedResult =
-  | { status: 'marked'; count: number }
-  /** DB 에 그 finalized 블록이 아직 없다 (polling-block 이 아직 거기까지 못 갔다) */
-  | { status: 'not-stored' }
-  /** DB 의 같은 번호 블록이 finalized 블록과 다르다 (polling-block 이 아직 reorg 를 되감기 전) */
-  | { status: 'hash-mismatch' };
 
 /** blocks 테이블 읽기/쓰기. 모두 .env 의 CHAIN_ID 체인 기준이다 */
 @Injectable()
@@ -27,13 +19,13 @@ export class BlocksService {
   ) {}
 
   /**
-   * 블록을 unfinalized 상태로 저장한다.
+   * 블록을 저장한다.
    *
    * 저장된 앞 블록과 이어지지 않으면 reorg 다. 앞 블록은 체인에서 빠진 블록이니 지우고 'rolled-back' 을
    * 돌려준다. 부른 쪽은 한 칸 물러나서(앞 블록 번호부터) 다시 받으면 된다. 이어지는 지점이 나올 때까지 반복된다.
-   * 최신 블록 근처의 1~2블록 reorg 는 흔하고, unfinalized 블록이라 입금 확인 전이니 포인트에는 영향이 없다.
+   * 최신 블록 근처의 1~2블록 reorg 는 흔하고, 입금 확인(DEPOSIT_CONFIRMATIONS 블록 뒤) 전이니 포인트에는 영향이 없다.
    *
-   * 이미 finalized 인 블록이 뒤집혔다면 프로토콜상 일어나면 안 되는 일이라 자동으로 고치지 않고 멈춘다.
+   * 입금 확인을 끝낸(is_scanned) 블록이 뒤집혔다면, 적립한 포인트가 틀렸을 수 있어서 자동으로 고치지 않고 멈춘다.
    */
   async saveBlock(block: Block): Promise<SaveBlockResult> {
     const chainId = this.chainId();
@@ -44,9 +36,9 @@ export class BlocksService {
       });
 
       if (previous && previous.hash !== block.parentHash) {
-        if (previous.status !== 'unfinalized') {
+        if (previous.isScanned) {
           throw new Error(
-            `${previous.status} 상태인 #${previous.number} 블록이 체인에서 바뀌었습니다. ` +
+            `입금 확인을 끝낸 #${previous.number} 블록이 체인에서 바뀌었습니다. ` +
               '자동으로 고치지 않습니다. 해당 구간의 blocks / transactions / user_balance_histories 를 확인하세요.',
           );
         }
@@ -70,28 +62,6 @@ export class BlocksService {
     });
   }
 
-  /**
-   * 노드의 finalized 블록 기준으로, 그 번호 이하의 unfinalized 블록을 finalized 로 바꾼다.
-   * DB 에 그 블록이 있고 hash 가 같을 때만 바꾼다 (DB 블록들은 앞 블록 hash 로 이어져 있으니,
-   * 이 블록이 맞으면 그 아래도 체인과 같다).
-   */
-  async markFinalized(finalized: Block): Promise<MarkFinalizedResult> {
-    const chainId = this.chainId();
-    const stored = await this.blocks.findOneBy({ chainId, number: finalized.number });
-    if (!stored) {
-      return { status: 'not-stored' };
-    }
-    if (stored.hash !== finalized.hash) {
-      return { status: 'hash-mismatch' };
-    }
-
-    const result = await this.blocks.update(
-      { chainId, status: 'unfinalized', number: LessThanOrEqual(finalized.number) },
-      { status: 'finalized' },
-    );
-    return { status: 'marked', count: result.affected ?? 0 };
-  }
-
   /** 이 번호의 블록이 이미 저장되어 있는지 */
   exists(blockNumber: number): Promise<boolean> {
     return this.blocks.existsBy({ chainId: this.chainId(), number: blockNumber });
@@ -99,14 +69,40 @@ export class BlocksService {
 
   /** 저장된 블록 중 가장 큰 번호. 하나도 없으면 null */
   async findLatestNumber(): Promise<number | null> {
-    const latest = await this.blocks.findOne({
-      where: { chainId: this.chainId() },
-      order: { number: 'DESC' },
-    });
-    return latest?.number ?? null;
+    return (await this.findLatest())?.number ?? null;
   }
 
-  private chainId(): number {
+  /** 최근 블록 (최신이 앞) */
+  findRecent(limit: number): Promise<BlockEntity[]> {
+    return this.blocks.find({
+      where: { chainId: this.chainId() },
+      order: { number: 'DESC' },
+      take: limit,
+    });
+  }
+
+  /** 저장된 블록 중 가장 최신 블록. 하나도 없으면 null */
+  findLatest(): Promise<BlockEntity | null> {
+    return this.blocks.findOne({ where: { chainId: this.chainId() }, order: { number: 'DESC' } });
+  }
+
+  /** from ~ to 번호의 블록 (번호 순, 없는 번호는 빠진다) */
+  findBetween(from: number, to: number): Promise<BlockEntity[]> {
+    return this.blocks.find({
+      where: { chainId: this.chainId(), number: Between(from, to) },
+      order: { number: 'ASC' },
+    });
+  }
+
+  /** 번호들로 블록을 찾는다 (없는 번호는 빠진다) */
+  findByNumbers(numbers: number[]): Promise<BlockEntity[]> {
+    return numbers.length
+      ? this.blocks.findBy({ chainId: this.chainId(), number: In(numbers) })
+      : Promise.resolve([]);
+  }
+
+  /** .env 의 CHAIN_ID */
+  chainId(): number {
     return this.config.get<number>('alchemy.chainId')!;
   }
 }

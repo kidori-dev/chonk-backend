@@ -104,6 +104,7 @@ export class BalancesCommand extends CommandRunner {
         '',
         '최소 sweep 금액 이상인 유저를 sweep 하려면:',
         `npm run cli -- sweep ${sweepable.map((d) => d.userId).join(' ')}${currencyArgs}`,
+        `(전체를 한 번에: npm run cli -- sweep --all${currencyArgs})`,
       );
     }
     this.logger.log(lines.join('\n'));

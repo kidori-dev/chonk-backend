@@ -43,13 +43,15 @@ export class UserBalanceCommand extends CommandRunner {
     if (histories.length === 0) {
       lines.push('  없음');
     }
-    for (const { history: h, transaction: t } of histories) {
+    for (const { history: h, transaction: t, bet } of histories) {
       const token = t
         ? `  (${formatUnits(t.amount, t.currency.decimals)} ${t.currency.symbol}, tx ${t.txHash})`
-        : '';
+        : bet
+          ? `  (${bet.game}${bet.targetBlockNumber ? ` #${bet.targetBlockNumber}` : ''}, bet ${bet.id})`
+          : '';
       const sign = h.points.startsWith('-') ? '' : '+';
       lines.push(
-        `  ${h.createdAt.toISOString()}  ${h.type.padEnd(8)} ${sign}${formatPoints(h.points)}` +
+        `  ${h.createdAt.toISOString()}  ${h.type.padEnd(10)} ${sign}${formatPoints(h.points)}` +
           `  ${formatPoints(h.pointsBefore)} → ${formatPoints(h.pointsAfter)} 포인트${token}`,
       );
     }

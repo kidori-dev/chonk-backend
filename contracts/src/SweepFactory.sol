@@ -56,7 +56,6 @@ contract SweepFactory is Ownable2Step {
     /// @notice salt 의 입금 주소에 DepositWallet Clone 을 배포한다
     function deployWallet(bytes32 salt) public onlyOwner returns (address wallet) {
         wallet = Clones.cloneDeterministic(implementation, salt);
-        DepositWallet(payable(wallet)).initialize(address(this));
         emit WalletDeployed(salt, wallet);
     }
 

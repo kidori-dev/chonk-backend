@@ -10,8 +10,9 @@ export class PointsResponseDto {
 export class PointHistoryItemDto {
   @ApiProperty({
     example: 'deposit',
-    enum: ['deposit', 'withdraw'],
-    description: '변경 이유 (deposit: 입금, withdraw: 출금)',
+    enum: ['deposit', 'withdraw', 'bet', 'bet_payout', 'churu'],
+    description:
+      '변경 이유 (deposit: 입금, withdraw: 출금, bet: 배팅으로 차감, bet_payout: 배팅 정산으로 지급, churu: 츄르 주기로 차감)',
   })
   type!: string;
 
@@ -28,7 +29,8 @@ export class PointHistoryItemDto {
     example: '42',
     nullable: true,
     type: String,
-    description: '원인이 된 행의 id (deposit → 입금 transactions.id)',
+    description:
+      '원인이 된 행의 id (deposit → 입금 transactions.id, bet / bet_payout → bets.id, churu → null)',
   })
   targetId!: string | null;
 
@@ -45,6 +47,14 @@ export class PointHistoryItemDto {
     description: '입금 트랜잭션 hash',
   })
   txHash!: string | null;
+
+  @ApiProperty({
+    example: 'coin',
+    nullable: true,
+    type: String,
+    description: '배팅 이력(bet / bet_payout)의 게임',
+  })
+  game!: string | null;
 
   @ApiProperty()
   createdAt!: Date;

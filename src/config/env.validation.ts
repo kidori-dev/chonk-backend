@@ -5,6 +5,8 @@ export const envValidationSchema = Joi.object({
   // production 이면 Swagger 문서가 꺼진다
   NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
   PORT: Joi.number().default(3000),
+  // 소켓(Socket.IO)에 붙을 수 있는 프론트 주소 (쉼표로 여러 개). 예) https://chonk.vercel.app,http://localhost:3001
+  SOCKET_CORS_ORIGINS: Joi.string().default('http://localhost:3001'),
   // 토큰 서명 키. 유출되면 누구나 토큰을 만들 수 있으니 길고 무작위로 만든다
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN: Joi.number().integer().min(60).default(3600),
@@ -22,8 +24,10 @@ export const envValidationSchema = Joi.object({
     .default(''),
   // 웹소켓을 쓸 때 끊김에 대비해 노드에 최신 블록을 물어보는 간격(ms)
   WS_FALLBACK_INTERVAL_MS: Joi.number().integer().min(1000).default(60000),
-  // polling-deposit 이 finalized 블록을 확인하는 간격(ms)
+  // polling-deposit 이 확인할 블록이 쌓였는지 DB 를 보는 간격(ms)
   DEPOSIT_POLL_INTERVAL_MS: Joi.number().integer().min(1000).default(60000),
+  // 최신 블록에서 이만큼 뒤의 블록까지만 입금을 확인한다
+  DEPOSIT_CONFIRMATIONS: Joi.number().integer().min(1).default(10),
   // polling-deposit 이 eth_getLogs 한 번에 확인할 블록 수. Alchemy 무료 플랜은 한 번에 10블록까지만 된다
   DEPOSIT_SCAN_BATCH: Joi.number().integer().min(1).default(10),
 
@@ -33,7 +37,7 @@ export const envValidationSchema = Joi.object({
   DB_PASSWORD: Joi.string().required(),
   DB_NAME: Joi.string().required(),
 
-  // 컨트랙트 배포용 (sweep-contract-deploy). 배포할 때만 필요해서 비워둬도 된다
+  // 컨트랙트 배포용 (sweep-contract-deploy, erc20-mint). 배포할 때만 필요해서 비워둬도 된다
   DEPLOYER_PRIVATE_KEY: Joi.string()
     .allow('')
     .pattern(/^(0x)?[0-9a-fA-F]{64}$/)

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
@@ -17,6 +18,7 @@ import { AuthService } from './auth.service';
 import { LoginRequestDto } from './dto/login.request.dto';
 import { LoginResponseDto } from './dto/login.response.dto';
 import { RefreshTokenRequestDto } from './dto/refresh-token.request.dto';
+import { RegisterRequestDto } from './dto/register.request.dto';
 import { TokenResponseDto } from './dto/token.response.dto';
 import { UserResponseDto } from './dto/user.response.dto';
 
@@ -40,6 +42,25 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: '이메일 또는 비밀번호가 올바르지 않음' })
   async login(@Body() dto: LoginRequestDto): Promise<LoginResponseDto> {
     const { tokens, user } = await this.auth.login(dto.email, dto.password);
+    return { ...tokens, user: UserResponseDto.from(user) };
+  }
+
+  /** POST /api/auth/register */
+  @Public()
+  // 계정 대량 생성을 막는다: 같은 IP 에서 1분에 5번까지
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '회원가입',
+    description:
+      '유저를 만들고 로그인과 같은 토큰을 내려준다. 입금 주소는 GET /api/deposit-address 에서 받는다.',
+  })
+  @ApiOkResponse({ type: LoginResponseDto })
+  @ApiConflictResponse({ description: '이미 가입된 이메일' })
+  async register(@Body() dto: RegisterRequestDto): Promise<LoginResponseDto> {
+    const { tokens, user } = await this.auth.register(dto);
     return { ...tokens, user: UserResponseDto.from(user) };
   }
 

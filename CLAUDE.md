@@ -6,12 +6,12 @@ EVM(Sepolia) ERC-20 입금 감지 → 포인트 적립 → CREATE2 + Clones 로 
 ## 작업 규칙
 
 - 대화와 코드 주석은 한국어.
-- 코드는 심플하고 읽기 쉽게. 과한 추상화/기능보다 단순한 구조 (웹소켓은 polling-block 의 새 블록 신호(newHeads)에만 쓰고 나머지는 HTTP, ETH 없이 ERC-20 만).
+- 코드는 심플하고 읽기 쉽게. 과한 추상화/기능보다 단순한 구조 (Alchemy 웹소켓은 polling-block 의 새 블록 신호(newHeads)에만 쓰고 나머지는 HTTP. 프론트 게임 화면에는 Socket.IO 로 blocks / rounds 를 보낸다. ETH 없이 ERC-20 만).
 - Alchemy 무료 플랜 기준으로 요청을 최소화한다.
   - RPC 는 `AlchemyService` 를 통해서만 호출한다 (메인 키 실패 시 서브 키로 넘어감).
   - `eth_getLogs` 는 한 번에 최대 10블록 (`DEPOSIT_SCAN_BATCH`).
   - 새 폴링/반복 호출을 추가하면 월 CU 사용량이 얼마나 늘어나는지 같이 확인한다.
-- 의미가 다른 상태는 컬럼을 나눈다 (예: `blocks.status` 와 `blocks.is_scanned`).
+- 의미가 다른 상태는 컬럼을 나눈다 (예: 입금 확인 여부는 다른 상태에 섞지 않고 `blocks.is_scanned` 로 따로 둔다).
 - DB 테이블/컬럼에는 마이그레이션에서 반드시 `COMMENT` 를 단다.
 - 새 환경 변수는 `.env.example`, `src/config/env.validation.ts`, `src/config/configuration.ts` 에 함께 추가한다.
 

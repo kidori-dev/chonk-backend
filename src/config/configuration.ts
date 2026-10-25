@@ -5,19 +5,26 @@
 export default () => ({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
+  // 소켓(Socket.IO)에 붙을 수 있는 프론트 주소 (쉼표로 여러 개)
+  socketCorsOrigins: (process.env.SOCKET_CORS_ORIGINS ?? 'http://localhost:3001')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   jwt: {
     secret: process.env.JWT_SECRET ?? '',
     expiresInSeconds: parseInt(process.env.JWT_EXPIRES_IN ?? '3600', 10),
     refreshExpiresInSeconds: parseInt(process.env.JWT_REFRESH_EXPIRES_IN ?? '1209600', 10),
   },
-  // 입금 감지 (polling-deposit). finalized 블록만 확인한다
+  // 입금 감지 (polling-deposit). 최신 블록에서 confirmations 만큼 뒤의 블록까지만 확인한다
   deposit: {
     // finalized 블록을 확인하는 간격 (finalized 는 약 6.4분마다 32블록씩 늘어나서 자주 볼 필요가 없다)
     pollIntervalMs: parseInt(process.env.DEPOSIT_POLL_INTERVAL_MS ?? '60000', 10),
     // polling-deposit: 로그 확인 안 된 블록이 이만큼 쌓이면 eth_getLogs 한 번으로 확인한다
     scanBatch: parseInt(process.env.DEPOSIT_SCAN_BATCH ?? '10', 10),
+    // 최신 블록이 N 이면 N - confirmations 이하 블록만 입금을 확인한다 (reorg 대비)
+    confirmations: parseInt(process.env.DEPOSIT_CONFIRMATIONS ?? '10', 10),
   },
-  // sweep-contract-deploy 커맨드에서만 쓴다
+  // sweep-contract-deploy / erc20-mint 커맨드에서만 쓴다 (treasuryAddress 는 sweep-contract-deploy 만)
   deploy: {
     privateKey: process.env.DEPLOYER_PRIVATE_KEY ?? '',
     treasuryAddress: process.env.SWEEP_TREASURY_ADDRESS ?? '',
