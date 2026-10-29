@@ -44,6 +44,9 @@ export class AuthService {
     if (!user.isActive) {
       throw new UnauthorizedException('비활성화된 계정입니다.');
     }
+    if (user.suspendedAt) {
+      throw new UnauthorizedException('정지된 계정입니다.');
+    }
 
     await this.users.touchLastLogin(user.id);
     return { tokens: await this.issueTokens(user), user };
@@ -65,7 +68,7 @@ export class AuthService {
     const userId = await this.refreshTokens.consume(refreshToken);
 
     const user = await this.users.findById(userId);
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.suspendedAt) {
       throw new UnauthorizedException('사용할 수 없는 계정입니다.');
     }
 

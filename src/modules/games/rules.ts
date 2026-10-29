@@ -7,11 +7,26 @@ import { randomInt } from 'crypto';
  * multiplier = 건 금액의 몇 배를 돌려받는지 (꽝 0, 본전 1). 예) 10 포인트에 2배면 20 을 돌려받는다
  */
 
-export const GAMES = ['coin', 'cat-race', 'block-match', 'dice', 'churu-match'] as const;
+export const GAMES = [
+  'coin',
+  'cat-race',
+  'block-match',
+  'dice',
+  'ladder',
+  'lottery',
+  'churu-match',
+] as const;
 export type Game = (typeof GAMES)[number];
 
 /** 블록 해시로 결과가 정해지는 게임. 나머지(churu-match)는 서버 난수로 바로 정해진다 */
-export const BLOCK_GAMES: readonly Game[] = ['coin', 'cat-race', 'block-match', 'dice'];
+export const BLOCK_GAMES: readonly Game[] = [
+  'coin',
+  'cat-race',
+  'block-match',
+  'dice',
+  'ladder',
+  'lottery',
+];
 
 /** 게임별로 고를 수 있는 값. null 이면 고르는 것 없이 금액만 건다 */
 export const PICKS: Record<Game, readonly string[] | null> = {
@@ -19,6 +34,8 @@ export const PICKS: Record<Game, readonly string[] | null> = {
   'cat-race': ['orange', 'black', 'calico', 'white'],
   'block-match': null,
   dice: ['low', 'seven', 'high'],
+  ladder: ['0', '1', '2', '3'],
+  lottery: '0123456789abcdef'.split(''),
   'churu-match': null,
 };
 
@@ -35,7 +52,7 @@ export const BET_OPEN_MS = 9_000;
 export const SETTLE_CONFIRMATIONS = 2;
 
 export interface Outcome {
-  /** 결과 값. 예) coin 'f', cat-race 'orange', block-match 'churu,fish,cat', dice '3,4' */
+  /** 결과 값. 예) coin 'f', cat-race 'orange', block-match 'churu,fish,cat', dice '3,4', ladder '2', lottery 'a' */
   result: string;
   /** 건 금액의 몇 배를 돌려받는지 (소수 문자열) */
   multiplier: string;
@@ -52,6 +69,10 @@ export function judgeBlock(game: Game, hash: string, pick: string | null): Outco
       return judgeSymbols(hashSymbols(hash), BLOCK_PAYOUTS);
     case 'dice':
       return judgeDice(hash, pick!);
+    case 'ladder':
+      return judgeLadder(hash, pick!);
+    case 'lottery':
+      return judgeLottery(hash, pick!);
     default:
       throw new Error(`블록 게임이 아닙니다: ${game}`);
   }
@@ -177,4 +198,25 @@ function judgeDice(hash: string, pick: string): Outcome {
   const hit = sum <= 6 ? 'low' : sum === 7 ? 'seven' : 'high';
   const multiplier = hit !== pick ? '0' : hit === 'seven' ? '5' : '2.2';
   return { result: dice.join(','), multiplier };
+}
+
+// ---- 사다리: 해시 마지막 글자로 당첨 고양이(출발 칸)를 정한다. 맞히면 3.8배 ----
+// 0~3 = 1번(0), 4~7 = 2번(1), 8~b = 3번(2), c~f = 4번(3). 각 1/4
+// 프론트는 해시 앞 10글자로 사다리를 그리고, 당첨 출발 칸이 내려가 닿는 칸을 당첨 칸으로 보여준다 (연출일 뿐 결과와 무관)
+
+/** 당첨되는 출발 칸 (0~3) */
+export function ladderWinner(hash: string): number {
+  return Math.floor(parseInt(hash.slice(-1), 16) / 4);
+}
+
+function judgeLadder(hash: string, pick: string): Outcome {
+  const winner = String(ladderWinner(hash));
+  return { result: winner, multiplier: winner === pick ? '3.8' : '0' };
+}
+
+// ---- 제비뽑기: 해시 마지막 글자(0~f) 하나를 맞히면 15배 (확률 1/16) ----
+
+function judgeLottery(hash: string, pick: string): Outcome {
+  const char = hash.slice(-1).toLowerCase();
+  return { result: char, multiplier: char === pick ? '15' : '0' };
 }

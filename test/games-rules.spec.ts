@@ -1,5 +1,5 @@
 import { payoutOf } from '../src/modules/games/games.service';
-import { catRaceWinner, diceOf, judgeBlock } from '../src/modules/games/rules';
+import { catRaceWinner, diceOf, judgeBlock, ladderWinner } from '../src/modules/games/rules';
 
 /** 64글자 해시를 만든다. 끝에 tail 을 붙이고 나머지는 fill 로 채운다 */
 function hash(tail: string, fill = '5'): string {
@@ -46,6 +46,20 @@ describe('게임 규칙 (프론트 chonk-frontend/src/app/games/* 와 같아야 
     expect(judgeBlock('dice', hash('0203'), 'seven')).toEqual({ result: '4,3', multiplier: '5' });
     expect(judgeBlock('dice', hash('0505'), 'high')).toEqual({ result: '6,6', multiplier: '2.2' });
     expect(judgeBlock('dice', hash('0505'), 'low').multiplier).toBe('0');
+  });
+
+  it('ladder: 마지막 글자 0~3 = 0, 4~7 = 1, 8~b = 2, c~f = 3. 맞히면 3.8배', () => {
+    const winners = '0123456789abcdef'.split('').map((c) => ladderWinner(hash(c)));
+    expect(winners).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]);
+    expect(judgeBlock('ladder', hash('9'), '2')).toEqual({ result: '2', multiplier: '3.8' });
+    expect(judgeBlock('ladder', hash('9'), '0')).toEqual({ result: '2', multiplier: '0' });
+  });
+
+  it('lottery: 마지막 글자를 맞히면 15배, 틀리면 0', () => {
+    expect(judgeBlock('lottery', hash('a'), 'a')).toEqual({ result: 'a', multiplier: '15' });
+    expect(judgeBlock('lottery', hash('a'), 'b')).toEqual({ result: 'a', multiplier: '0' });
+    expect(judgeBlock('lottery', hash('0'), '0').multiplier).toBe('15');
+    expect(judgeBlock('lottery', hash('F'), 'f')).toEqual({ result: 'f', multiplier: '15' });
   });
 
   it('payout = amount × multiplier', () => {

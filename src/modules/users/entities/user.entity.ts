@@ -27,6 +27,14 @@ export class User {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
+  /** 관리자가 정지한 시각 (chonk-admin-backend). null 이 아니면 로그인·토큰 재발급·API(배팅 포함)가 막힌다 */
+  @Column({ name: 'suspended_at', type: 'timestamptz', nullable: true })
+  suspendedAt!: Date | null;
+
+  /** 정지 사유 (관리자 입력) */
+  @Column({ name: 'suspended_reason', type: 'varchar', length: 200, nullable: true })
+  suspendedReason!: string | null;
+
   @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
 

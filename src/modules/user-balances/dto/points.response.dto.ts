@@ -10,9 +10,9 @@ export class PointsResponseDto {
 export class PointHistoryItemDto {
   @ApiProperty({
     example: 'deposit',
-    enum: ['deposit', 'withdraw', 'bet', 'bet_payout', 'churu'],
+    enum: ['deposit', 'withdraw', 'bet', 'bet_payout', 'churu', 'admin'],
     description:
-      '변경 이유 (deposit: 입금, withdraw: 출금, bet: 배팅으로 차감, bet_payout: 배팅 정산으로 지급, churu: 츄르 주기로 차감)',
+      '변경 이유 (deposit: 입금, withdraw: 출금, bet: 배팅으로 차감, bet_payout: 배팅 정산으로 지급, churu: 츄르 주기로 차감, admin: 관리자 지급·차감)',
   })
   type!: string;
 

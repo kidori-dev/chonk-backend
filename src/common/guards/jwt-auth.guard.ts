@@ -15,7 +15,7 @@ export type AuthenticatedRequest = Request & { user: User };
  *
  * 1. Authorization: Bearer <토큰> 헤더에서 토큰을 꺼낸다
  * 2. 서명과 만료를 검사한다
- * 3. 토큰의 유저를 DB 에서 다시 읽어, 지워졌거나 비활성화된 유저면 막는다
+ * 3. 토큰의 유저를 DB 에서 다시 읽어, 지워졌거나 비활성화·정지된 유저면 막는다 (정지 즉시 배팅도 막힌다)
  * 4. 통과하면 request.user 에 유저를 넣는다 (@CurrentUser() 로 꺼내 쓴다)
  */
 @Injectable()
@@ -49,7 +49,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const user = await this.users.findById(payload.sub);
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.suspendedAt) {
       throw new UnauthorizedException('사용할 수 없는 계정입니다.');
     }
 

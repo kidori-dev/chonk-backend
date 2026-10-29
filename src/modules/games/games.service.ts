@@ -165,12 +165,10 @@ export class GamesService {
     const chainId = this.blocks.chainId();
 
     // 1) 라운드를 아직 기록하지 않은 블록 (처음이면 최근 ROUND_BACKFILL 블록부터)
+    //    polling-block 이 멈춰 있던 동안은 blocks 가 비어 있으니, 번호 범위가 아니라 저장된 블록을 개수로 가져와 빈 구간을 건너뛴다
     const lastRound = await this.findLatestRoundNumber();
     const from = lastRound === null ? upTo - ROUND_BACKFILL + 1 : lastRound + 1;
-    const blocks =
-      from <= upTo
-        ? await this.blocks.findBetween(from, Math.min(upTo, from + ROUND_BATCH - 1))
-        : [];
+    const blocks = from <= upTo ? await this.blocks.findBetween(from, upTo, ROUND_BATCH) : [];
 
     // 2) 그보다 앞 블록에 걸렸는데 아직 정산 안 된 배팅 (판정 블록이 늦게 저장된 경우 등)
     const leftover = await this.bets.find({

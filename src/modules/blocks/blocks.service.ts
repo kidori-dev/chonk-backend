@@ -86,11 +86,12 @@ export class BlocksService {
     return this.blocks.findOne({ where: { chainId: this.chainId() }, order: { number: 'DESC' } });
   }
 
-  /** from ~ to 번호의 블록 (번호 순, 없는 번호는 빠진다) */
-  findBetween(from: number, to: number): Promise<BlockEntity[]> {
+  /** from ~ to 번호의 블록 (번호 순, 없는 번호는 빠진다). limit 을 주면 앞에서부터 그 개수까지 */
+  findBetween(from: number, to: number, limit?: number): Promise<BlockEntity[]> {
     return this.blocks.find({
       where: { chainId: this.chainId(), number: Between(from, to) },
       order: { number: 'ASC' },
+      take: limit,
     });
   }
 

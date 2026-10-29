@@ -48,8 +48,9 @@ export class RefreshTokensService {
     }
 
     if (row.revokedAt) {
-      // 로그아웃한 토큰은 클라이언트가 실수로 다시 보낼 수 있다. 탈취로 보지 않고 거절만 한다
-      if (row.revokeReason !== 'logout') {
+      // 재발급에 쓴 토큰이 다시 오면 탈취로 본다.
+      // 로그아웃이나 관리자(정지·비밀번호 초기화)로 폐기된 토큰은 클라이언트가 모르고 다시 보낼 수 있어서 거절만 한다
+      if (row.revokeReason === 'rotated' || row.revokeReason === 'reuse_detected') {
         this.logger.warn(`폐기된 리프레시 토큰 재사용 감지 → 유저 ${row.userId} 의 토큰 전부 폐기`);
         await this.revokeAll(row.userId);
       }

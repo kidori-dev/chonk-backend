@@ -11,10 +11,11 @@ import { User } from '../../users/entities/user.entity';
 
 /**
  * 포인트가 바뀐 이유. 입금(deposit) / 출금(withdraw) / 배팅으로 차감(bet) / 배팅 정산으로 지급(bet_payout) /
- * Chonk 고양이에게 츄르 주기로 차감(churu).
+ * Chonk 고양이에게 츄르 주기로 차감(churu) / 관리자 지급·차감(admin, chonk-admin-backend 가 남긴다).
  * 출금은 아직 기록하지 않는다
  */
-export type UserBalanceHistoryType = 'deposit' | 'withdraw' | 'bet' | 'bet_payout' | 'churu';
+export type UserBalanceHistoryType =
+  'deposit' | 'withdraw' | 'bet' | 'bet_payout' | 'churu' | 'admin';
 
 /**
  * 유저 포인트 변경 이력 1건 = 1행. 지우거나 고치지 않고 쌓기만 한다.

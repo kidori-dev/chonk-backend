@@ -20,7 +20,7 @@ export class PlaceBetDto {
   @ApiPropertyOptional({
     example: 'odd',
     description:
-      '고른 값. coin: odd/even, cat-race: orange/black/calico/white, dice: low/seven/high. block-match, churu-match 는 비운다',
+      '고른 값. coin: odd/even, cat-race: orange/black/calico/white, dice: low/seven/high, ladder: 0/1/2/3(출발 칸), lottery: 0~f. block-match, churu-match 는 비운다',
   })
   @IsOptional()
   @IsString()
@@ -82,7 +82,7 @@ export class BetDto {
     nullable: true,
     type: String,
     description:
-      "결과 값 (coin: 해시 마지막 글자, cat-race: 1등 고양이, 그림 맞추기: 'churu,fish,cat', dice: '3,4')",
+      "결과 값 (coin: 해시 마지막 글자, cat-race: 1등 고양이, 그림 맞추기: 'churu,fish,cat', dice: '3,4', ladder: 당첨 출발 칸 '2', lottery: 마지막 글자 'a')",
   })
   result!: string | null;
 
@@ -143,7 +143,7 @@ export class RoundDto {
   @ApiProperty({
     example: 'f',
     description:
-      "결과 값 (coin: 해시 마지막 글자, cat-race: 1등 고양이, block-match: 'churu,fish,cat', dice: '3,4')",
+      "결과 값 (coin: 해시 마지막 글자, cat-race: 1등 고양이, block-match: 'churu,fish,cat', dice: '3,4', ladder: 당첨 출발 칸 '2', lottery: 마지막 글자 'a')",
   })
   result!: string;
 

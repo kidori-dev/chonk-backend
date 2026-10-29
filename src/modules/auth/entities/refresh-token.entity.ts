@@ -5,8 +5,10 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeor
  * - rotated: 재발급에 사용됨
  * - logout: 로그아웃
  * - reuse_detected: 다른 토큰의 재사용(탈취)이 감지돼 함께 폐기됨
+ * - suspended: 관리자가 유저를 정지함 (chonk-admin-backend)
+ * - password_reset: 관리자가 비밀번호를 초기화함 (chonk-admin-backend)
  */
-export type RevokeReason = 'rotated' | 'logout' | 'reuse_detected';
+export type RevokeReason = 'rotated' | 'logout' | 'reuse_detected' | 'suspended' | 'password_reset';
 
 /**
  * 발급한 리프레시 토큰 한 개 = 한 행.

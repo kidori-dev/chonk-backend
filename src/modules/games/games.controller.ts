@@ -79,7 +79,7 @@ export class GamesController {
   @ApiOperation({
     summary: '배팅',
     description:
-      '블록 게임(coin, cat-race, block-match, dice)은 targetBlockNumber = 최신 블록 + 2 에 건다. ' +
+      '블록 게임(coin, cat-race, block-match, dice, ladder, lottery)은 targetBlockNumber = 최신 블록 + 2 에 건다. ' +
       '블록이 나오고 9초 안에만 걸 수 있고, 결과는 판정 블록 뒤로 2블록이 더 나오면 정산된다. ' +
       'churu-match 는 바로 결과가 나온다 (status = settled).',
   })
