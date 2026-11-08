@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 import { GameRound } from '../entities/game-round.entity';
-import { BET_AMOUNTS, BLOCK_GAMES, GAMES } from '../rules';
+import { BLOCK_GAMES, GAMES } from '../rules';
 
 /** POST /api/games/:game/bets */
 export class PlaceBetDto {
@@ -26,8 +26,12 @@ export class PlaceBetDto {
   @IsString()
   pick?: string;
 
-  @ApiProperty({ example: 10, enum: BET_AMOUNTS, description: '걸 포인트' })
-  @IsIn(BET_AMOUNTS)
+  // 1 이상 정수면 얼마든 건다 (잔액 부족은 배팅할 때 따로 막힌다).
+  // String(amount) 로 DB 에 넣으니 지수 표기(1e+21)가 안 나오게 안전한 정수까지만 받는다
+  @ApiProperty({ example: 10, minimum: 1, description: '걸 포인트 (1 이상 정수)' })
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
   amount!: number;
 }
 

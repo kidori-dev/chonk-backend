@@ -39,9 +39,6 @@ export const PICKS: Record<Game, readonly string[] | null> = {
   'churu-match': null,
 };
 
-/** 걸 수 있는 금액 (포인트) */
-export const BET_AMOUNTS = [10, 50, 100];
-
 /** 지금 블록이 N 이면 N+2 블록에 건다 (N+1 이 나오면 마감) */
 export const BET_AHEAD = 2;
 
